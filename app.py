@@ -51,6 +51,7 @@ def create_time_matrix(*step_points: List[StepPoint]):
     arr = np.zeros((n, n))
     items = [sp.address for sp in step_points]
     split_arrs = np.array_split(items, (n // 10) + 1)
+    split_arrs_len = [len(a) for a in split_arrs]
     for i, a in enumerate(split_arrs):
         for j, b in enumerate(split_arrs):
             resp = gmaps.distance_matrix(
@@ -60,8 +61,8 @@ def create_time_matrix(*step_points: List[StepPoint]):
             for k, r in enumerate(resp["rows"]):
                 for l, c in enumerate(r["elements"]):
                     p, q = (
-                        (len(np.hstack(split_arrs[:i])) if i > 0 else 0) + k,
-                        (len(np.hstack(split_arrs[:j])) if j > 0 else 0) + l,
+                        sum(split_arrs_len[:i]) + k,
+                        sum(split_arrs_len[:j]) + l,
                     )
                     if p == q:
                         continue
@@ -97,8 +98,9 @@ def create_data_model(*step_points: List[StepPoint]):
 
 
 def print_solution(data, manager, routing, solution):
-    """Prints solution on console."""
-    st.write("Objective:", solution.ObjectiveValue())
+    st.header("Timeschedule")
+    st.caption("A ~ B : 到着時刻の解の範囲．すなわち「車両は時刻AとBの間にそこに到着していれば良い」という意味．滞在時間帯ではないので注意！")
+    # st.write("Objective:", solution.ObjectiveValue())
     time_dimension = routing.GetDimensionOrDie("Time")
     total_time = 0
     for vehicle_id in range(data["num_vehicles"]):
@@ -107,9 +109,8 @@ def print_solution(data, manager, routing, solution):
         while not routing.IsEnd(index):
             time_var = time_dimension.CumulVar(index)
             st.write(
-                "From ",
                 data["start_time"] + timedelta(minutes=solution.Min(time_var)),
-                " To ",
+                " ~ ",
                 data["start_time"] + timedelta(minutes=solution.Max(time_var)),
                 " @ ",
                 data["name"][manager.IndexToNode(index)],
@@ -199,7 +200,7 @@ def solve_vrp(*step_points: List[StepPoint]):
 def main():
     st.set_page_config(page_icon="🗺️", page_title="TSPTW with Streamlit", layout="wide")
     st.title("Traveling Salesman Problem with Time Windows and Steps on Streamlit")
-    st.write("This is a webapp with streamlit to solve the traveling salesman problem with time windows and steps")
+    st.caption("This is a webapp with streamlit to solve the traveling salesman problem with time windows and steps")
 
     step_points = []
     # depot
@@ -230,7 +231,7 @@ def main():
     step_points += [create_step_point(len(step_points), "")]
     step_points += [create_step_point(len(step_points), "")]
 
-    if st.button("calc!"):
+    if st.button("FIND ROUTE 🔍"):
         solve_vrp(*[stp for stp in step_points if stp is not None])
 
 
