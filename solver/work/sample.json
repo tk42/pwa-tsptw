@@ -1,0 +1,27 @@
+[
+    {
+        "id": "hoge1",
+        "name": "Mr. XXX",
+        "x": "1.23",
+        "y": "4.56",
+        "allowed_datetime": [
+            ["6:00","8:00"],
+            ["12:00","13:00"]
+        ],
+        "prohibited_datetime": [
+        ],
+        "assumed_consumed_min": 60
+    },
+    {
+        "id": "hoge2",
+        "name": "Mr. XXX2",
+        "x": "7.89",
+        "y": "0.12",
+        "allowed_datetime": [
+        ],
+        "prohibited_datetime": [
+            ["14:00","15:00"]
+        ],
+        "assumed_consumed_min": 30
+    }
+]

@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  notebook:
+    build:
+      context: .
+    ports:
+      - '8888:8888'
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    volumes:
+      - ./work:/home/jovyan/work
+    # command: start-notebook.sh --NotebookApp.token=''
+    command: jupyter lab --ip=0.0.0.0 --no-browser --allow-root --LabApp.password_required=False --LabApp.token='' --NotebookApp.token=''  --NotebookApp.password_required=False

@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  notebook:
+    # jupyterコンテナのサービス名※2
+    build: . # ビルド対象のDockerfileが同じフォルダ内にあるためピリオド(.)を打つ
+    ports:
+      - '8888:8888'
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - GRANT_SUDO=yes
+      - DOCKER_STACKS_JUPYTER_CMD=notebook
+    working_dir: /home/jovyan/work
+    user: root
+    volumes:
+      # ホストとのボリューム共有。../workは上のフォルダ構造で示した※1の一つ上の階層のworkフォルダを指し示す。
+      - type: bind
+        source: ../work
+        target: /home/jovyan/work
+    command: start-notebook.sh --NotebookApp.token='' --ip=0.0.0.0 --no-browser --allow-root --LabApp.password_required=False
+    # command: jupyter lab --ip=0.0.0.0 --no-browser --allow-root --LabApp.password_required=False --LabApp.token=''

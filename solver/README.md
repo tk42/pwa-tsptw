@@ -1,0 +1,1 @@
+https://github.com/SolKul/vscode-jupyter-container2
