@@ -82,13 +82,12 @@ def create_time_windows(*step_points: List[StepPoint]):
     ]
 
 
+# Stores the data for the problem.
 def create_data_model(*step_points: List[StepPoint]):
-    """Stores the data for the problem."""
     data = {}
     data["name"] = [sp.name for sp in step_points]
     data["start_time"] = datetime.combine(datetime.today(), step_points[0].start_time)
     data["time_matrix"] = create_time_matrix(*step_points)
-    # st.write(data["time_matrix"])  # for debug
     # https://developers.google.com/optimization/reference/python/constraint_solver/pywrapcp#intvar
     data["time_windows"] = create_time_windows(*step_points)
     data["num_vehicles"] = 1
@@ -98,7 +97,7 @@ def create_data_model(*step_points: List[StepPoint]):
 
 def print_solution(data, manager, routing, solution):
     st.header("Timeschedule")
-    st.caption("A ~ B : 到着時刻の解の範囲．すなわち「車両は時刻AとBの間にそこに到着していれば良い」という意味．滞在時間帯ではないので注意！")
+    st.info("A ~ B : 到着時刻の解の範囲．すなわち「車両は時刻AとBの間にそこに到着していれば良い」という意味．滞在時間帯ではないので注意！")
     # st.write("Objective:", solution.ObjectiveValue())
     time_dimension = routing.GetDimensionOrDie("Time")
     total_time = 0
@@ -130,10 +129,10 @@ def print_solution(data, manager, routing, solution):
     st.write("Total time of all routes: ", total_time, "min")
 
 
+# Solve the VRP with time windows.
 def solve_vrp(*step_points: List[StepPoint]):
     assert len(step_points) > 0, "There is no step point."
 
-    """Solve the VRP with time windows."""
     # Instantiate the data problem.
     data = create_data_model(*step_points)
 
@@ -195,14 +194,15 @@ def solve_vrp(*step_points: List[StepPoint]):
     if solution:
         print_solution(data, manager, routing, solution)
     else:
-        st.write("Not found the solution")
+        st.error("Not found the solution")
+        st.warning(data["time_matrix"])  # for debug
 
 
 def main():
     st.set_page_config(page_icon="🗺️", page_title="TSPTW with Streamlit", layout="wide")
     st.title("Traveling Salesman Problem with Time Windows and Steps on Streamlit")
     st.caption("This is a webapp with streamlit to solve the traveling salesman problem with time windows and steps")
-    st.write("Note that No. 0 is the depot. Skipped if the address is empty.")
+    st.info("No. 0 is the depot. Skipped if the address is empty.")
 
     step_points = []
     # depot
