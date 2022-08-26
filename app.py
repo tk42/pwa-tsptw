@@ -1,5 +1,4 @@
 import os
-from posixpath import split
 import googlemaps
 
 # from googlemaps import LatLng
@@ -34,8 +33,8 @@ def create_step_point(num: int, default_address: str) -> StepPoint | None:
     with col4:
         start_time = st.time_input("Available start time", time(hour=8, minute=45), key=f"start{num}")
     with col5:
-        end_time = st.time_input("Available end time", time(hour=17, minute=0), key=f"end{num}")
-    if step_name == "" or step_address == "":
+        end_time = st.time_input("Available end time", time(hour=19, minute=0), key=f"end{num}")
+    if step_address == "":
         return None
     return StepPoint(
         name=step_name,
@@ -132,6 +131,8 @@ def print_solution(data, manager, routing, solution):
 
 
 def solve_vrp(*step_points: List[StepPoint]):
+    assert len(step_points) > 0, "There is no step point."
+
     """Solve the VRP with time windows."""
     # Instantiate the data problem.
     data = create_data_model(*step_points)
@@ -201,6 +202,7 @@ def main():
     st.set_page_config(page_icon="🗺️", page_title="TSPTW with Streamlit", layout="wide")
     st.title("Traveling Salesman Problem with Time Windows and Steps on Streamlit")
     st.caption("This is a webapp with streamlit to solve the traveling salesman problem with time windows and steps")
+    st.write("Note that No. 0 is the depot. Skipped if the address is empty.")
 
     step_points = []
     # depot
