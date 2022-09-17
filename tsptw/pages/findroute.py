@@ -196,8 +196,9 @@ class FindRoutePage(BasePage):
             st.warning("Please login to continue")
             return
 
+        step_points = []
         if "step_points" not in st.session_state:
-            st.session_state["step_points"] = []
+            st.session_state["step_points"] = step_points
 
         contacts = self.sort_data(self.connect_to_database(st.session_state["sid"]))
 
