@@ -28,7 +28,7 @@ class EditPage(BasePage):
         cont_ref = self.connect_to_database(sid)
         if actor == ActorId.ADD:
             sp = StepPoint(
-                str(uuid.uuid4()).replace("-", "_"),
+                uuid.uuid4().hex,
                 int(time.time()),
                 step_name,
                 step_address,
@@ -43,7 +43,6 @@ class EditPage(BasePage):
                 cont_ref.update({sp.id: sp.to_dict()})
         elif actor == ActorId.UPDATE:
             sp = StepPoint(sp_id, timestamp, step_name, step_address, staying_min, start_time, end_time)
-            st.write(sp.to_dict())
             cont_ref.update({sp.id: sp.to_dict()})
         elif actor == ActorId.DELETE:
             if last_delete:
@@ -80,9 +79,8 @@ class EditPage(BasePage):
         st.markdown(
             """
         ### 使い方
-         - 追加する場合：アクションで「追加」選択後，下段の「名称」「住所」「見積診察時間」「滞在可能時間(始)」「滞在可能時間(終)」を入力し，「追加」ボタンを押してください
-         - 編集する場合：アクションで「更新」，上段の「登録名」で編集対象の経由地点を選択し，下段で編集後，「更新」ボタンを押してください
-         - 削除する場合：アクションで「削除」，上段の「登録名」で編集対象の経由地点を選択し，下段で「削除」ボタンを押してください
+         - 追加する場合：「名称」「住所」「見積診察時間」「滞在可能時間(始)」「滞在可能時間(終)」を入力し，「追加」ボタンを押してください
+         - 編集/削除する場合：上段の「編集対象」で編集対象の経由地点を選択し，下段で「更新」/「削除」ボタンを押してください
         """
         )
 
@@ -92,32 +90,32 @@ class EditPage(BasePage):
 
         contacts = self.sort_data(self.connect_to_database(st.session_state["sid"]))
 
-        col1, col2, _ = st.columns([1, 4, 2])
-        with col1:
-            actor = st.selectbox(
-                "アクション",
-                [ActorId.ADD, ActorId.UPDATE, ActorId.DELETE],
-                format_func=lambda x: str(x),
+        # col1, col2, _ = st.columns([1, 4, 2])
+        # with col1:
+        #     actor = st.selectbox(
+        #         "アクション",
+        #         [ActorId.ADD, ActorId.UPDATE, ActorId.DELETE],
+        #         format_func=lambda x: str(x),
+        #     )
+        # with col2:
+        if contacts:
+            selected = st.selectbox(
+                "編集/削除対象",
+                contacts.values(),
+                format_func=lambda contact: contact["name"],
+                key="selectbox",
             )
-        with col2:
-            if contacts:
-                selected = st.selectbox(
-                    "登録名",
-                    contacts.values(),
-                    format_func=lambda contact: contact["name"],
-                    key="selectbox",
-                )
-            else:
-                st.warning("1件も見つかりませんでした")
-                selected = {
-                    "id": "",
-                    "timestamp": 0,
-                    "name": "",
-                    "address": "",
-                    "staying_min": 0,
-                    "start_time": "08:45:00",
-                    "end_time": "19:00:00",
-                }
+        else:
+            st.warning("1件も見つかりませんでした")
+            selected = {
+                "id": "",
+                "timestamp": 0,
+                "name": "",
+                "address": "",
+                "staying_min": 0,
+                "start_time": "08:45:00",
+                "end_time": "19:00:00",
+            }
 
         with st.form(key="step_point"):
             col11, col12, col13, col14 = st.columns([4, 1, 1, 1])
@@ -135,16 +133,59 @@ class EditPage(BasePage):
 
             st.text_input("住所", selected["address"], key="step_address")
 
-            submit_button = st.form_submit_button(
-                label=str(actor),
+            col21, col22, col23, _ = st.columns([1, 1, 1, 6])
+            add_button = col21.form_submit_button(
+                label=str(ActorId.ADD),
                 on_click=self.submit,
                 kwargs={
-                    "actor": actor,
+                    "actor": ActorId.ADD,
                     "sp_id": selected["id"],
                     "timestamp": selected["timestamp"],
                     "first_set": selected["id"] == "",
                     "last_delete": contacts is not None and len(contacts) == 1,
                 },
             )
-            if submit_button:
-                st.success(f"{actor}に成功しました！")
+            if add_button:
+                st.success(f"{str(ActorId.ADD)}に成功しました！")
+
+            update_button = col22.form_submit_button(
+                label=str(ActorId.UPDATE),
+                on_click=self.submit,
+                kwargs={
+                    "actor": ActorId.UPDATE,
+                    "sp_id": selected["id"],
+                    "timestamp": selected["timestamp"],
+                    "first_set": selected["id"] == "",
+                    "last_delete": contacts is not None and len(contacts) == 1,
+                },
+            )
+            if update_button:
+                st.success(f"{str(ActorId.UPDATE)}に成功しました！")
+
+            del_button = col23.form_submit_button(
+                label=str(ActorId.DELETE),
+                on_click=self.submit,
+                kwargs={
+                    "actor": ActorId.DELETE,
+                    "sp_id": selected["id"],
+                    "timestamp": selected["timestamp"],
+                    "first_set": selected["id"] == "",
+                    "last_delete": contacts is not None and len(contacts) == 1,
+                },
+            )
+            if del_button:
+                st.success(f"{str(ActorId.DELETE)}に成功しました！")
+
+            # submit_button = st.form_submit_button(
+            #     label=str(actor),
+            #     on_click=self.submit,
+            #     kwargs={
+            #         "actor": actor,
+            #         "sp_id": selected["id"],
+            #         "timestamp": selected["timestamp"],
+            #         "first_set": selected["id"] == "",
+            #         "last_delete": contacts is not None and len(contacts) == 1,
+            #     },
+            # )
+            # if submit_button:
+            #     st.success(f"{actor}に成功しました！")
