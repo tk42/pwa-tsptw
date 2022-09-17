@@ -1,25 +1,59 @@
 import os
+import time
+import uuid
 import googlemaps
 
 # from googlemaps import LatLng
 import numpy as np
 import streamlit as st
 from typing import List
-from datetime import time, datetime, timedelta
+import datetime as dt
+from datetime import datetime, timedelta
 from collections import namedtuple
+
+import firebase_admin
+from firebase_admin import firestore, credentials
+
+from streamlit_auth0 import login_button
+
+AUTH0_CLIENT_ID = "ciFCosdQaze8Vwz2CQRci6Xa4Or1GTuu"
+AUTH0_DOMAIN = "tk42.jp.auth0.com"
 
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 
-# import folium
-# from streamlit_folium import st_folium
-
-# from sample import sample_mat, sample_mat2, sample_tw
-
 gmaps = googlemaps.Client(key=os.environ.get("GOOGLEMAP_API_KEY"))
 
 Location = namedtuple("Location", ["lat", "lng"])
-StepPoint = namedtuple("StepPoint", ["name", "address", "staying_min", "start_time", "end_time"])
+baseCls = namedtuple("StepPoint", ["id", "index", "name", "address", "staying_min", "start_time", "end_time"])
+
+
+class StepPoint(baseCls):
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "index": self.index,
+            "name": self.name,
+            "address": self.address,
+            "staying_min": self.staying_min,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat(),
+        }
+
+    @staticmethod
+    def from_dict(source: dict):
+        return StepPoint(
+            source["id"],
+            source["index"],
+            source["name"],
+            source["address"],
+            source["staying_min"],
+            datetime.fromisoformat(source["start_time"]),
+            datetime.fromisoformat(source["end_time"]),
+        )
+
+    def __repr__(self) -> str:
+        return f"StepPoint({self.id}, {self.index}, {self.name}, {self.address}, {self.staying_min}, {self.start_time}, {self.end_time})"
 
 
 def create_step_point(num: int, default_address: str) -> StepPoint | None:
@@ -31,12 +65,14 @@ def create_step_point(num: int, default_address: str) -> StepPoint | None:
     with col3:
         staying_min = st.number_input("Staying time [min.]", min_value=0, max_value=180, step=5, key=f"staying{num}")
     with col4:
-        start_time = st.time_input("Available start time", time(hour=8, minute=45), key=f"start{num}")
+        start_time = st.time_input("Available start time", dt.time(hour=8, minute=45), key=f"start{num}")
     with col5:
-        end_time = st.time_input("Available end time", time(hour=19, minute=0), key=f"end{num}")
+        end_time = st.time_input("Available end time", dt.time(hour=19, minute=0), key=f"end{num}")
     if step_address == "":
         return None
     return StepPoint(
+        id=str(uuid.uuid4()),
+        index=num,
         name=step_name,
         address=step_address,
         staying_min=int(staying_min),
@@ -196,45 +232,80 @@ def solve_vrp(*step_points: List[StepPoint]):
     else:
         st.error("Not found the solution")
         st.warning(data["time_matrix"])  # for debug
+    return solution
+
+
+def logined(sid: str):
+    db = firestore.client()
+
+    hist_ref = db.collection(sid).document("history")
+    doc = hist_ref.get()
+    if doc.exists:
+        st.write(doc.to_dict())
+
+    cont_ref = db.collection(sid).document("contact")
+
+    st.info("No. 0 is the depot. Skipped if the address is empty.")
+
+    step_points = []
+    # depot
+    # step_points += [create_step_point(len(step_points), "650-0011 兵庫県神戸市中央区下山手通2丁目11-1")]
+    # step_points += [create_step_point(len(step_points), "658-0072 兵庫県神戸市東灘区岡本1-5-5 ダイソービル 2階")]
+    # step_points += [create_step_point(len(step_points), "651-0078 兵庫県神戸市中央区八雲通1-4-35")]
+    # step_points += [create_step_point(len(step_points), "652-0811 兵庫県神戸市兵庫区新開地3-4-22")]
+    # step_points += [create_step_point(len(step_points), "651-1101 兵庫県神戸市北区山田町小部 字広苅14-8")]
+    # step_points += [create_step_point(len(step_points), "654-0111 兵庫県神戸市須磨区車道谷山1-2")]
+    # step_points += [create_step_point(len(step_points), "655-0852 兵庫県神戸市垂水区名谷町686-2")]
+    # step_points += [create_step_point(len(step_points), "650-0022 兵庫県神戸市中央区元町通1-10-7")]
+    # step_points += [create_step_point(len(step_points), "653-0015 兵庫県神戸市長田区菅原通6-2")]
+    # step_points += [create_step_point(len(step_points), "654-0055 兵庫県神戸市須磨区須磨浦通4-6-20")]
+
+    # step_points += [create_step_point(len(step_points), "651-1131 兵庫県神戸市北区北五葉1-1-3")]
+    # step_points += [create_step_point(len(step_points), "655-0893 兵庫県神戸市垂水区日向1-4")]
+    # step_points += [create_step_point(len(step_points), "652-0804 兵庫県神戸市兵庫区塚本通6-1-18")]
+    # step_points += [create_step_point(len(step_points), "657-0027 兵庫県神戸市灘区永手町5-4-16")]
+    # step_points += [create_step_point(len(step_points), "658-0023 兵庫県神戸市東灘区深江浜町82")]
+    # step_points += [create_step_point(len(step_points), "658-0054 兵庫県神戸市東灘区御影中町1-13-8")]
+    # step_points += [create_step_point(len(step_points), "659-0065 兵庫県芦屋市公光町10-14")]
+    # step_points += [create_step_point(len(step_points), "662-0947 兵庫県西宮市宮前町1-14")]
+    # step_points += [create_step_point(len(step_points), "662-0043 兵庫県西宮市常磐町1-2")]
+    # step_points += [create_step_point(len(step_points), "662-0832 兵庫県西宮市甲風園1-5-16")]
+    # step_points += [create_step_point(len(step_points), "")]
+    # step_points += [create_step_point(len(step_points), "")]
+    # step_points += [create_step_point(len(step_points), "")]
+    # step_points += [create_step_point(len(step_points), "")]
+    # step_points += [create_step_point(len(step_points), "")]
+
+    send_data = {sp.id: sp.to_dict() for sp in step_points if sp is not None}
+    if send_data:
+        cont_ref.set(send_data)
+
+    if st.button("FIND ROUTE 🔍"):
+        if solve_vrp(*[stp for stp in step_points if stp is not None]):
+            hist_ref.set(
+                {"timestamp": int(time.time()), "step_points": [sp.to_dict() for sp in step_points if sp is not None]}
+            )
 
 
 def main():
     st.set_page_config(page_icon="🗺️", page_title="TSPTW with Streamlit", layout="wide")
     st.title("Traveling Salesman Problem with Time Windows and Steps on Streamlit")
     st.caption("This is a webapp with streamlit to solve the traveling salesman problem with time windows and steps")
-    st.info("No. 0 is the depot. Skipped if the address is empty.")
 
-    step_points = []
-    # depot
-    step_points += [create_step_point(len(step_points), "650-0011 兵庫県神戸市中央区下山手通2丁目11-1")]
-    step_points += [create_step_point(len(step_points), "658-0072 兵庫県神戸市東灘区岡本1-5-5 ダイソービル 2階")]
-    step_points += [create_step_point(len(step_points), "651-0078 兵庫県神戸市中央区八雲通1-4-35")]
-    step_points += [create_step_point(len(step_points), "652-0811 兵庫県神戸市兵庫区新開地3-4-22")]
-    step_points += [create_step_point(len(step_points), "651-1101 兵庫県神戸市北区山田町小部 字広苅14-8")]
-    step_points += [create_step_point(len(step_points), "654-0111 兵庫県神戸市須磨区車道谷山1-2")]
-    step_points += [create_step_point(len(step_points), "655-0852 兵庫県神戸市垂水区名谷町686-2")]
-    step_points += [create_step_point(len(step_points), "650-0022 兵庫県神戸市中央区元町通1-10-7")]
-    step_points += [create_step_point(len(step_points), "653-0015 兵庫県神戸市長田区菅原通6-2")]
-    step_points += [create_step_point(len(step_points), "654-0055 兵庫県神戸市須磨区須磨浦通4-6-20")]
+    if firebase_admin._DEFAULT_APP_NAME not in firebase_admin._apps:
+        if os.environ.get("CLOUD_RUN") and os.environ.get("CLOUD_RUN").title() == "True":
+            cred = credentials.ApplicationDefault()
+        else:
+            cred = credentials.Certificate("./serviceAccount.json")
+        firebase_admin.initialize_app(cred)
 
-    step_points += [create_step_point(len(step_points), "651-1131 兵庫県神戸市北区北五葉1-1-3")]
-    step_points += [create_step_point(len(step_points), "655-0893 兵庫県神戸市垂水区日向1-4")]
-    step_points += [create_step_point(len(step_points), "652-0804 兵庫県神戸市兵庫区塚本通6-1-18")]
-    step_points += [create_step_point(len(step_points), "657-0027 兵庫県神戸市灘区永手町5-4-16")]
-    step_points += [create_step_point(len(step_points), "658-0023 兵庫県神戸市東灘区深江浜町82")]
-    step_points += [create_step_point(len(step_points), "658-0054 兵庫県神戸市東灘区御影中町1-13-8")]
-    step_points += [create_step_point(len(step_points), "659-0065 兵庫県芦屋市公光町10-14")]
-    step_points += [create_step_point(len(step_points), "662-0947 兵庫県西宮市宮前町1-14")]
-    step_points += [create_step_point(len(step_points), "662-0043 兵庫県西宮市常磐町1-2")]
-    step_points += [create_step_point(len(step_points), "662-0832 兵庫県西宮市甲風園1-5-16")]
-    step_points += [create_step_point(len(step_points), "")]
-    step_points += [create_step_point(len(step_points), "")]
-    step_points += [create_step_point(len(step_points), "")]
-    step_points += [create_step_point(len(step_points), "")]
-    step_points += [create_step_point(len(step_points), "")]
-
-    if st.button("FIND ROUTE 🔍"):
-        solve_vrp(*[stp for stp in step_points if stp is not None])
+    user_info = login_button(client_id=AUTH0_CLIENT_ID, domain=AUTH0_DOMAIN)
+    if user_info:
+        with st.sidebar:
+            st.write("test")
+        logined(user_info["sid"])
+    else:
+        st.warning("Please login to continue")
 
 
 if __name__ == "__main__":

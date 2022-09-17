@@ -1,5 +1,8 @@
 ortools
 streamlit
-streamlit_folium
-folium
+#streamlit_folium
+#folium
 googlemaps
+firebase-admin
+streamlit-auth0
+google
