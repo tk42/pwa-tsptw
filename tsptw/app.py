@@ -16,6 +16,10 @@ class MultiPageApp:
         with st.sidebar:
             user_info = login_button(client_id=AUTH0_CLIENT_ID, domain=AUTH0_DOMAIN)
             if user_info:
+                if not user_info["email_verified"]:
+                    st.error("Email is not verified")
+                    return
+
                 st.session_state["sid"] = user_info["sid"]
             else:
                 if "sid" in st.session_state and st.session_state["sid"] is None:

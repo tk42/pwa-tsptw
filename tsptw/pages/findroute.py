@@ -200,7 +200,7 @@ class FindRoutePage(BasePage):
             st.warning("Please login to continue")
             return
 
-        if "step_points" in st.session_state:
+        if "step_points" in st.session_state and st.session_state["step_points"]:
             self.step_points = st.session_state["step_points"]
 
         contacts = self.sort_data(self.connect_to_database(st.session_state["sid"]))
@@ -215,7 +215,7 @@ class FindRoutePage(BasePage):
             self.step_points = st.multiselect(
                 "経由地点",
                 contacts.values(),
-                self.step_points,
+                default=self.step_points,
                 format_func=lambda contact: contact["name"],
                 key="step_points",
                 disabled=len(self.step_points) > 25,

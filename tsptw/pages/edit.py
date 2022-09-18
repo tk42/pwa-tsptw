@@ -20,7 +20,6 @@ class EditPage(BasePage):
         actor: ActorId = ActorId.NONE,
         sp_id: str = "",
         timestamp: int = 0,
-        first_set: bool = False,
         last_delete: bool = False,
     ):
         sid = st.session_state["sid"]
@@ -41,10 +40,7 @@ class EditPage(BasePage):
                 end_time,
             )
 
-            if first_set:
-                cont_ref.set({sp.id: sp.to_dict()})
-            else:
-                cont_ref.update({sp.id: sp.to_dict()})
+            cont_ref.set({sp.id: sp.to_dict()}, merge=True)
         elif actor == ActorId.UPDATE:
             sp = StepPoint(sp_id, timestamp, step_name, step_address, staying_min, start_time, end_time)
             cont_ref.update({sp.id: sp.to_dict()})
@@ -137,7 +133,6 @@ class EditPage(BasePage):
                     "actor": ActorId.ADD,
                     "sp_id": self.selected["id"],
                     "timestamp": self.selected["timestamp"],
-                    "first_set": self.selected["id"] == "",
                     "last_delete": contacts is not None and len(contacts) == 1,
                 },
             )
@@ -151,7 +146,6 @@ class EditPage(BasePage):
                     "actor": ActorId.UPDATE,
                     "sp_id": self.selected["id"],
                     "timestamp": self.selected["timestamp"],
-                    "first_set": self.selected["id"] == "",
                     "last_delete": contacts is not None and len(contacts) == 1,
                 },
             )
@@ -165,7 +159,6 @@ class EditPage(BasePage):
                     "actor": ActorId.DELETE,
                     "sp_id": self.selected["id"],
                     "timestamp": self.selected["timestamp"],
-                    "first_set": self.selected["id"] == "",
                     "last_delete": contacts is not None and len(contacts) == 1,
                 },
             )
