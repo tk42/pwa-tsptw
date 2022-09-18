@@ -3,7 +3,7 @@ import time
 import datetime as dt
 import streamlit as st
 from .base import BasePage
-from tsptw.const import StepPoint, ActorId
+from tsptw.const import StepPoint, ActorId, PageId
 from tsptw.const import hash_client
 from firebase_admin import firestore
 from google.cloud.firestore import DELETE_FIELD
@@ -11,6 +11,10 @@ from google.cloud.firestore_v1.client import Client
 
 
 class EditPage(BasePage):
+    def __init__(self, page_id: PageId, title: str) -> None:
+        super().__init__(page_id, title)
+        self.selected = {}
+
     def submit(
         self,
         actor: ActorId = ActorId.NONE,
@@ -80,7 +84,7 @@ class EditPage(BasePage):
             """
         ### 使い方
          - 追加する場合：「名称」「住所」「見積診察時間」「滞在可能時間(始)」「滞在可能時間(終)」を入力し，「追加」ボタンを押してください
-         - 編集/削除する場合：上段の「編集対象」で編集対象の経由地点を選択し，下段で「更新」/「削除」ボタンを押してください
+         - 編集/削除する場合：上段の「編集/削除対象」で対象の経由地点を選択し，下段で「更新」/「削除」ボタンを押してください
         """
         )
 
@@ -90,24 +94,16 @@ class EditPage(BasePage):
 
         contacts = self.sort_data(self.connect_to_database(st.session_state["sid"]))
 
-        # col1, col2, _ = st.columns([1, 4, 2])
-        # with col1:
-        #     actor = st.selectbox(
-        #         "アクション",
-        #         [ActorId.ADD, ActorId.UPDATE, ActorId.DELETE],
-        #         format_func=lambda x: str(x),
-        #     )
-        # with col2:
         if contacts:
-            selected = st.selectbox(
+            self.selected = st.selectbox(
                 "編集/削除対象",
                 contacts.values(),
                 format_func=lambda contact: contact["name"],
-                key="selectbox",
+                key="selected",
             )
         else:
             st.warning("1件も見つかりませんでした")
-            selected = {
+            self.selected = {
                 "id": "",
                 "timestamp": 0,
                 "name": "",
@@ -119,19 +115,19 @@ class EditPage(BasePage):
 
         with st.form(key="step_point"):
             col11, col12, col13, col14 = st.columns([4, 1, 1, 1])
-            col11.text_input("名称", selected["name"], key="step_name")
+            col11.text_input("名称", self.selected["name"], key="step_name")
             col12.number_input(
                 "見積診察時間[分]",
-                value=selected["staying_min"],
+                value=self.selected["staying_min"],
                 min_value=0,
                 max_value=180,
                 step=5,
                 key="staying_min",
             )
-            col13.time_input("滞在可能時刻(始)", dt.time.fromisoformat(selected["start_time"]), key="start_time")
-            col14.time_input("滞在可能時刻(終)", dt.time.fromisoformat(selected["end_time"]), key="end_time")
+            col13.time_input("滞在可能時刻(始)", dt.time.fromisoformat(self.selected["start_time"]), key="start_time")
+            col14.time_input("滞在可能時刻(終)", dt.time.fromisoformat(self.selected["end_time"]), key="end_time")
 
-            st.text_input("住所", selected["address"], key="step_address")
+            st.text_input("住所", self.selected["address"], key="step_address")
 
             col21, col22, col23, _ = st.columns([1, 1, 1, 6])
             add_button = col21.form_submit_button(
@@ -139,9 +135,9 @@ class EditPage(BasePage):
                 on_click=self.submit,
                 kwargs={
                     "actor": ActorId.ADD,
-                    "sp_id": selected["id"],
-                    "timestamp": selected["timestamp"],
-                    "first_set": selected["id"] == "",
+                    "sp_id": self.selected["id"],
+                    "timestamp": self.selected["timestamp"],
+                    "first_set": self.selected["id"] == "",
                     "last_delete": contacts is not None and len(contacts) == 1,
                 },
             )
@@ -153,9 +149,9 @@ class EditPage(BasePage):
                 on_click=self.submit,
                 kwargs={
                     "actor": ActorId.UPDATE,
-                    "sp_id": selected["id"],
-                    "timestamp": selected["timestamp"],
-                    "first_set": selected["id"] == "",
+                    "sp_id": self.selected["id"],
+                    "timestamp": self.selected["timestamp"],
+                    "first_set": self.selected["id"] == "",
                     "last_delete": contacts is not None and len(contacts) == 1,
                 },
             )
@@ -167,25 +163,11 @@ class EditPage(BasePage):
                 on_click=self.submit,
                 kwargs={
                     "actor": ActorId.DELETE,
-                    "sp_id": selected["id"],
-                    "timestamp": selected["timestamp"],
-                    "first_set": selected["id"] == "",
+                    "sp_id": self.selected["id"],
+                    "timestamp": self.selected["timestamp"],
+                    "first_set": self.selected["id"] == "",
                     "last_delete": contacts is not None and len(contacts) == 1,
                 },
             )
             if del_button:
                 st.success(f"{str(ActorId.DELETE)}に成功しました！")
-
-            # submit_button = st.form_submit_button(
-            #     label=str(actor),
-            #     on_click=self.submit,
-            #     kwargs={
-            #         "actor": actor,
-            #         "sp_id": selected["id"],
-            #         "timestamp": selected["timestamp"],
-            #         "first_set": selected["id"] == "",
-            #         "last_delete": contacts is not None and len(contacts) == 1,
-            #     },
-            # )
-            # if submit_button:
-            #     st.success(f"{actor}に成功しました！")

@@ -1,11 +1,11 @@
 import numpy as np
 import datetime as dt
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import streamlit as st
 from typing import List
 from .base import BasePage
-from tsptw.const import hash_client, StepPoint, gmaps
+from tsptw.const import hash_client, StepPoint, gmaps, PageId
 from firebase_admin import firestore
 from google.cloud.firestore_v1.client import Client
 
@@ -15,6 +15,10 @@ from ortools.constraint_solver import pywrapcp
 
 
 class FindRoutePage(BasePage):
+    def __init__(self, page_id: PageId, title: str) -> None:
+        super().__init__(page_id, title)
+        self.step_points = []
+
     def create_time_matrix(self, *step_points: List[StepPoint]):
         n = len(step_points)
         arr = np.zeros((n, n))
@@ -196,9 +200,8 @@ class FindRoutePage(BasePage):
             st.warning("Please login to continue")
             return
 
-        step_points = []
-        if "step_points" not in st.session_state:
-            st.session_state["step_points"] = step_points
+        if "step_points" in st.session_state:
+            self.step_points = st.session_state["step_points"]
 
         contacts = self.sort_data(self.connect_to_database(st.session_state["sid"]))
 
@@ -209,16 +212,16 @@ class FindRoutePage(BasePage):
                 format_func=lambda contact: contact["name"],
                 key="depot",
             )
-            step_points = st.multiselect(
+            self.step_points = st.multiselect(
                 "経由地点",
                 contacts.values(),
-                st.session_state["step_points"],
+                self.step_points,
                 format_func=lambda contact: contact["name"],
                 key="step_points",
-                disabled=len(st.session_state["step_points"]) > 25,
+                disabled=len(self.step_points) > 25,
             )
 
-            all_points = [StepPoint.from_dict(p) for p in [depot] + step_points]
+            all_points = [StepPoint.from_dict(p) for p in [depot] + self.step_points]
 
             if st.button("ルート探索 🔍"):
                 self.solve_vrp(*all_points)
