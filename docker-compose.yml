@@ -5,4 +5,3 @@ services:
     ports:
       - 8501:8501
     env_file: .env.local
-    command: ["streamlit", "run", "app.py"]

@@ -3,7 +3,7 @@ Web app with streamlit to solve the traveling salesman problem with time windows
 
 ## Demo
 ```
-streamlit run app.py
+streamlit run main.py
 ```
 
 ## Tips
