@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 8501
 
-ENTRYPOINT [ "streamlit", "run", "/home/main.py", "--server.enableCORS=false", "--server.enableXsrfProtection=false" ]
+ENTRYPOINT [ "streamlit", "run", "/home/main.py"]
