@@ -1,5 +1,6 @@
 import os
 import googlemaps
+import datetime as dt
 from enum import Enum, IntEnum, auto
 from datetime import datetime, date
 from collections import namedtuple
@@ -12,6 +13,14 @@ gmaps = googlemaps.Client(key=os.environ.get("GOOGLEMAP_API_KEY"))
 
 Location = namedtuple("Location", ["lat", "lng"])
 baseCls = namedtuple("StepPoint", ["id", "timestamp", "name", "address", "staying_min", "start_time", "end_time"])
+
+today = datetime.now().date()
+
+
+def create_datetime(t: dt.time or str, fromisoformat=False):
+    if fromisoformat:
+        t = dt.time.fromisoformat(t)
+    return datetime.combine(today, t)
 
 
 class StepPoint(baseCls):

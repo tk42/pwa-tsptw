@@ -5,7 +5,7 @@ from datetime import timedelta
 import streamlit as st
 from typing import List
 from .base import BasePage
-from tsptw.const import hash_client, StepPoint, gmaps, PageId
+from tsptw.const import hash_client, StepPoint, gmaps, PageId, create_datetime
 from firebase_admin import firestore
 from google.cloud.firestore_v1.client import Client
 
@@ -42,26 +42,27 @@ class FindRoutePage(BasePage):
                         arr[p][q] = step_points[p].staying_min + int(c["duration"]["value"] / 60)  # sec -> min
         return arr.astype(int)
 
-    def diff_min(self, end: dt.time, start: dt.time) -> int:
+    def diff_min(self, end: dt.datetime, start: dt.datetime) -> int:
         return int((end - start).total_seconds() / 60)
 
-    def create_time_windows(self, *step_points: List[StepPoint]):
+    def create_time_windows(self, start_time: dt.time, *step_points: List[StepPoint]):
         return [
             (
-                self.diff_min(sp.start_time, step_points[0].start_time),
-                self.diff_min(sp.end_time, step_points[0].start_time),
+                self.diff_min(sp.start_time, start_time),
+                self.diff_min(sp.end_time, start_time),
             )
             for sp in step_points
         ]
 
     # Stores the data for the problem.
-    def create_data_model(self, *step_points: List[StepPoint]):
+    def create_data_model(self, start_time: dt.datetime, end_time: dt.datetime, *step_points: List[StepPoint]):
         data = {}
         data["name"] = [sp.name for sp in step_points]
-        data["start_time"] = step_points[0].start_time
+        data["start_time"] = start_time
+        data["depot_opening_time"] = self.diff_min(end_time, start_time)
         data["time_matrix"] = self.create_time_matrix(*step_points)
         # https://developers.google.com/optimization/reference/python/constraint_solver/pywrapcp#intvar
-        data["time_windows"] = self.create_time_windows(*step_points)
+        data["time_windows"] = self.create_time_windows(start_time, *step_points)
         data["num_vehicles"] = 1
         data["depot"] = 0
         return data
@@ -102,7 +103,10 @@ class FindRoutePage(BasePage):
         assert len(step_points) > 0, "There is no step point."
 
         # Instantiate the data problem.
-        data = self.create_data_model(*step_points)
+        start_time = create_datetime(st.session_state.start_time)
+        end_time = create_datetime("23:59:59", fromisoformat=True)
+
+        data = self.create_data_model(start_time, end_time, *step_points)
 
         # Create the routing index manager.
         manager = pywrapcp.RoutingIndexManager(len(data["time_matrix"]), data["num_vehicles"], data["depot"])
@@ -124,12 +128,11 @@ class FindRoutePage(BasePage):
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
         # Add Time Windows constraint.
-        depot_opening_time = self.diff_min(step_points[0].end_time, step_points[0].start_time)
         dimension_name = "Time"
         routing.AddDimension(
             transit_callback_index,
-            depot_opening_time,  # allow waiting time [min]
-            depot_opening_time,  # maximum time [min] per vehicle until return
+            data["depot_opening_time"],  # allow waiting time [min]
+            data["depot_opening_time"],  # maximum time [min] per vehicle until return
             False,  # Don't force start cumul to zero.
             dimension_name,
         )
@@ -169,9 +172,9 @@ class FindRoutePage(BasePage):
         return solution
 
     @st.cache(hash_funcs={Client: hash_client}, allow_output_mutation=True)
-    def connect_to_database(self, sid: str):
+    def connect_to_database(self, key: str):
         db = firestore.client()
-        return db.collection(sid).document("contact")
+        return db.collection(key).document("contact")
 
     def sort_data(self, ref):
         doc = ref.get()
@@ -185,33 +188,39 @@ class FindRoutePage(BasePage):
 
         st.markdown(
             """
+        経由地点を一度ずつすべて経由して，出発地点に戻ってくる巡回経路を求めます
         ### 使い方
-         1. 最初に出発地点を設定してください
-         1. 経由地点（出発地点は除く）を必要なだけ追加してください（最大25箇所）
-         1. 途中で出発地点を経由する場合は経由地点に新規追加してください（滞在時刻に注意）
+         1. 最初に「出発地点」および「出発時刻」を指定してください
+         1. 経由地点（出発地点は除く）を複数追加してください（最大25箇所）
+         1. 途中で出発地点を経由する場合は経由地点に新規追加してください
+
+            例：出発地点で昼休みを取る場合「お昼休み」という経由地点を新規追加．滞在時間帯は昼休みを開始しても良い時間帯(例えば11:30-13:30)．見積診察時間はそのまま昼休憩の時間と読み替える
          1. 「ルート探索」ボタンを実行してください
          1. 求解できた場合，A ~ B という形式で表示されます(例:```2022-09-17 08:45:00 ~ 2022-09-17 08:45:00```)．
-            これは「到着時刻の解の範囲」，すなわち「車両は時刻AとBの間にそこに到着していれば良い」という意味になります．滞在時間帯ではないのでご注意ください
-         1. 「CP Solver fail」というエラーが出た場合は見積診察時間の条件が厳しすぎることが考えられます．緩和して再度お試しください
+            これは「到着時刻の解の範囲」，すなわち「車両は時刻AとBの間にそこに到着していれば良い」という意味になります．訪問時間帯ではないのでご注意ください
+         1. ```CP Solver fail``` エラーが出た場合は見積診察時間の条件が厳しすぎることが考えられます．緩和して再度お試しください
         """
         )
 
-        if "sid" not in st.session_state:
+        if "user_info" not in st.session_state:
             st.warning("Please login to continue")
             return
 
         if "step_points" in st.session_state and st.session_state["step_points"]:
             self.step_points = st.session_state["step_points"]
 
-        contacts = self.sort_data(self.connect_to_database(st.session_state["sid"]))
+        contacts = self.sort_data(self.connect_to_database(st.session_state["user_info"]["email"]))
 
         if contacts:
-            depot = st.selectbox(
+            col1, col2 = st.columns([6, 1])
+            depot = col1.selectbox(
                 "出発地点",
                 contacts.values(),
                 format_func=lambda contact: contact["name"],
                 key="depot",
             )
+            col2.time_input("出発時刻", dt.time.fromisoformat("09:00:00"), key="start_time")
+
             self.step_points = st.multiselect(
                 "経由地点",
                 contacts.values(),
@@ -220,6 +229,16 @@ class FindRoutePage(BasePage):
                 key="step_points",
                 disabled=len(self.step_points) > 25,
             )
+
+            if st.session_state.depot["id"] in [pt["id"] for pt in st.session_state.step_points]:
+                st.warning("経由地点に出発地点を登録することはできません．途中立ち寄る必要がある場合は経由地点を新規で追加してください（上記「使い方」参照）")
+
+            if create_datetime(st.session_state.depot["start_time"], fromisoformat=True) > create_datetime(
+                st.session_state.start_time
+            ):
+                st.warning(
+                    f"出発地点の訪問可能時間帯(始){st.session_state.depot['start_time']}よりも出発時刻{st.session_state.start_time}が早いです．出発時刻を見直すか出発地点を見直してください．"
+                )
 
             all_points = [StepPoint.from_dict(p) for p in [depot] + self.step_points]
 

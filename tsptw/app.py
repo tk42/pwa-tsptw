@@ -2,14 +2,21 @@ import streamlit as st
 
 from tsptw.pages.base import BasePage
 
+from firebase_admin import firestore
 from streamlit_auth0 import login_button
-from tsptw.const import AUTH0_CLIENT_ID, AUTH0_DOMAIN
+from tsptw.const import hash_client, AUTH0_CLIENT_ID, AUTH0_DOMAIN
+from google.cloud.firestore_v1.client import Client
 
 
 class MultiPageApp:
     def __init__(self, pages: list[BasePage], nav_label: str = "ページ一覧") -> None:
         self.pages = {page.page_id: page for page in pages}
         self.nav_label = nav_label
+
+    @st.cache(hash_funcs={Client: hash_client}, allow_output_mutation=True)
+    def connect_to_database(self, key: str):
+        db = firestore.client()
+        return db.collection(key).document("user_info")
 
     def render(self) -> None:
         # ログインボタン
@@ -20,10 +27,11 @@ class MultiPageApp:
                     st.error("Email is not verified")
                     return
 
-                st.session_state["sid"] = user_info["sid"]
+                st.session_state["user_info"] = user_info
+                self.connect_to_database(user_info["email"]).set(user_info, merge=True)
             else:
-                if "sid" in st.session_state and st.session_state["sid"] is None:
-                    del st.session_state["sid"]
+                if "user_info" in st.session_state and st.session_state["user_info"]["email"] is None:
+                    del st.session_state["user_info"]["email"]
                 st.warning("Please login to continue")
 
         # ページ選択ボックスを追加
