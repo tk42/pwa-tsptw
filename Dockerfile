@@ -9,4 +9,7 @@ COPY . .
 
 EXPOSE 8501
 
-ENTRYPOINT [ "streamlit", "run", "/home/main.py"]
+RUN find /usr/local/lib/python3.10/site-packages/streamlit -type f -iname "*.py" -print0 | xargs -0 sed -i 's/healthz/health-check/g'
+RUN find /usr/local/lib/python3.10/site-packages/streamlit -type f -iname "*.js" -print0 | xargs -0 sed -i 's/healthz/health-check/g'
+
+ENTRYPOINT [ "streamlit", "run", "main.py" ]
