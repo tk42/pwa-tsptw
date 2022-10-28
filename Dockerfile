@@ -9,6 +9,7 @@ COPY . .
 
 EXPOSE 8501
 
+# https://github.com/streamlit/streamlit/issues/3028
 RUN find /usr/local/lib/python3.10/site-packages/streamlit -type f -iname "*.py" -print0 | xargs -0 sed -i 's/healthz/health-check/g'
 RUN find /usr/local/lib/python3.10/site-packages/streamlit -type f -iname "*.js" -print0 | xargs -0 sed -i 's/healthz/health-check/g'
 
