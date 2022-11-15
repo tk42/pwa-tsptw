@@ -46,10 +46,11 @@ class FindRoutePage(BasePage):
         return int((end - start).total_seconds() / 60)
 
     def create_time_windows(self, start_time: dt.time, *step_points: List[StepPoint]):
+        # 滞在先の見積診察時間を，滞在可能時間帯から予め引いておく
         return [
             (
                 self.diff_min(sp.start_time, start_time),
-                self.diff_min(sp.end_time, start_time),
+                self.diff_min(sp.end_time - timedelta(minutes=sp.staying_min), start_time),
             )
             for sp in step_points
         ]
@@ -68,35 +69,41 @@ class FindRoutePage(BasePage):
         return data
 
     def print_solution(self, data, manager, routing, solution):
-        # st.write("Objective:", solution.ObjectiveValue())
         time_dimension = routing.GetDimensionOrDie("Time")
         total_time = 0
         for vehicle_id in range(data["num_vehicles"]):
             index = routing.Start(vehicle_id)
-            st.write("Route for vehicle", vehicle_id)
+            # st.write("Route for vehicle", vehicle_id)
             while not routing.IsEnd(index):
                 time_var = time_dimension.CumulVar(index)
-                st.write(
-                    data["start_time"] + timedelta(minutes=solution.Min(time_var)),
-                    " ~ ",
-                    data["start_time"] + timedelta(minutes=solution.Max(time_var)),
-                    " @ ",
-                    data["name"][manager.IndexToNode(index)],
-                    " ➡ ",
-                )
+                if solution.Min(time_var) == solution.Max(time_var):
+                    st.write(
+                        data["name"][manager.IndexToNode(index)],
+                        "さん宅．最短で",
+                        data["start_time"] + timedelta(minutes=solution.Min(time_var)),
+                        "に到着することができます",
+                    )
+                else:
+                    st.write(
+                        data["name"][manager.IndexToNode(index)],
+                        "さん宅．最短で",
+                        data["start_time"] + timedelta(minutes=solution.Min(time_var)),
+                        "に到着することができますが，遅くとも",
+                        data["start_time"] + timedelta(minutes=solution.Max(time_var)),
+                        "までには到着しなければなりません"
+                    )
                 index = solution.Value(routing.NextVar(index))
             time_var = time_dimension.CumulVar(index)
             st.write(
-                "From ",
-                data["start_time"] + timedelta(minutes=solution.Min(time_var)),
-                " To ",
-                data["start_time"] + timedelta(minutes=solution.Max(time_var)),
-                " @ ",
+                "最終地点(=出発地点) ",
                 data["name"][manager.IndexToNode(index)],
+                "．最短で",
+                data["start_time"] + timedelta(minutes=solution.Min(time_var)),
+                "に到着することができます",
             )
-            st.write("Time of the route: ", solution.Min(time_var), "min")
+            st.write("この経路の所要時間: ", solution.Min(time_var), "分")
             total_time += solution.Min(time_var)
-        st.write("Total time of all routes: ", total_time, "min")
+        # st.write("全経路の所要時間: ", total_time, "分")
 
     # Solve the VRP with time windows.
     def solve_vrp(self, *step_points: List[StepPoint]):
@@ -133,7 +140,7 @@ class FindRoutePage(BasePage):
             transit_callback_index,
             data["depot_opening_time"],  # allow waiting time [min]
             data["depot_opening_time"],  # maximum time [min] per vehicle until return
-            False,  # Don't force start cumul to zero.
+            True,  # Force start cumul to zero.
             dimension_name,
         )
         time_dimension = routing.GetDimensionOrDie(dimension_name)
@@ -156,9 +163,12 @@ class FindRoutePage(BasePage):
             routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(i)))
             routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
 
+        # Add SpanCost to minimize total wait time. See https://stackoverflow.com/questions/62411546/google-or-tools-minimize-total-time
+        time_dimension.SetGlobalSpanCostCoefficient(1)
+        
         # Setting first solution heuristic.
         search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-        search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+        search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.AUTOMATIC
 
         # Solve the problem.
         solution = routing.SolveWithParameters(search_parameters)
@@ -196,9 +206,7 @@ class FindRoutePage(BasePage):
 
             例：出発地点で昼休みを取る場合「お昼休み」という経由地点を新規追加．滞在時間帯は昼休みを開始しても良い時間帯(例えば11:30-13:30)．見積診察時間はそのまま昼休憩の時間と読み替える
          1. 「ルート探索」ボタンを実行してください
-         1. 求解できた場合，A ~ B という形式で表示されます(例:```2022-09-17 08:45:00 ~ 2022-09-17 08:45:00```)．
-            これは「到着時刻の解の範囲」，すなわち「車両は時刻AとBの間にそこに到着していれば良い」という意味になります．訪問時間帯ではないのでご注意ください
-         1. ```CP Solver fail``` エラーが出た場合は見積診察時間の条件が厳しすぎることが考えられます．緩和して再度お試しください
+         1. ```CP Solver fail``` エラーが出た場合は見積診察時間の条件が厳しすぎることが考えられます．緩和して再度お試しください．
         """
         )
 
