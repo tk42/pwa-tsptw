@@ -1,7 +1,7 @@
 ortools
-streamlit==1.14.1
-#streamlit_folium
-#folium
+streamlit==1.15.0
+pydeck
+pandas
 googlemaps
 firebase-admin
 streamlit-auth0

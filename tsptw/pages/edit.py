@@ -2,10 +2,11 @@ import uuid
 import time
 import datetime as dt
 import streamlit as st
+
 from .base import BasePage
 from firebase_admin import firestore
 from google.cloud.firestore import DELETE_FIELD
-from tsptw.const import StepPoint, ActorId, PageId, create_datetime
+from tsptw.const import StepPoint, ActorId, create_datetime, geocode
 
 
 class EditPage(BasePage):
@@ -20,46 +21,53 @@ class EditPage(BasePage):
         last_delete: bool = False,
     ):
         email = st.session_state["user_info"]["email"]
+        cont_ref = self.connect_to_database(email)
+        if actor == ActorId.DELETE:
+            if last_delete:
+                cont_ref.delete()
+            else:
+                cont_ref.update({sp_id: DELETE_FIELD})
+            return
+
         step_name = st.session_state["step_name"]
         step_address = st.session_state["step_address"]
         staying_min = st.session_state["staying_min"]
         start_time = st.session_state["start_time"]
         end_time = st.session_state["end_time"]
+        loc = geocode(step_address)
 
-        cont_ref = self.connect_to_database(email)
-        # TODO: Remove ValueError logs somewhere around here.
-        # ValueError: {'start_time': ,,,, 'staying_min': 0} is not in iterable
-        # See: https://github.com/streamlit/streamlit/issues/3598
         if actor == ActorId.ADD:
             sp = StepPoint(
                 uuid.uuid4().hex,
                 int(time.time()),
                 step_name,
                 step_address,
+                loc.lat,
+                loc.lng,
                 staying_min,
                 start_time,
                 end_time,
             )
             cont_ref.set({sp.id: sp.to_dict()}, merge=True)
-        elif actor == ActorId.UPDATE:
+
+        if actor == ActorId.UPDATE:
             sp = StepPoint(
                 sp_id,
                 timestamp,
                 step_name,
                 step_address,
+                loc.lat,
+                loc.lng,
                 staying_min,
                 start_time,
                 end_time,
             )
+            # TODO: Remove ValueError logs somewhere around here.
+            # ValueError: {'start_time': ,,,, 'staying_min': 0} is not in iterable
+            # See: https://github.com/streamlit/streamlit/issues/3598
+            # st.session_state["selected"] = sp.to_dict()
             cont_ref.update({sp.id: sp.to_dict()})
-        elif actor == ActorId.DELETE:
-            if last_delete:
-                cont_ref.delete()
-            else:
-                cont_ref.update({sp_id: DELETE_FIELD})
-        return
 
-    @st.cache(allow_output_mutation=True)
     def connect_to_database(self, key: str):
         db = firestore.client()
         return db.collection(key).document("contact")
@@ -77,18 +85,18 @@ class EditPage(BasePage):
         st.markdown(
             """
         ### 説明
-         - 「名称」：経由地点の名称．訪問場所の覚えやすい名称を付けることが可能です．
-         - 「住所」：経由地点の住所．都道府県から番地まで入力してください．郵便番号は不要です．挙動不審の場合はGoogleMapで住所検索をおこない，想定の場所にドロップピンが指されることを確認してください．
-         - 「見積診察時間」：車を停車してから発車するまでのおおよその時間を5分刻みで入力してください
-         - 「訪問可能時間帯(始)」：経由地点に到着してもよい最も早い時刻を入力してください
-         - 「訪問可能時間帯(終)」：経由地点に滞在してもよい最も遅い時刻を入力してください
+        - 「名称」：経由地点の名称．訪問場所の覚えやすい名称を付けることが可能です．
+        - 「住所」：経由地点の住所．都道府県から番地まで入力してください．郵便番号は不要です．挙動不審の場合はGoogleMapで住所検索をおこない，想定の場所にドロップピンが指されることを確認してください．
+        - 「見積診察時間」：車を停車してから発車するまでのおおよその時間を5分刻みで入力してください
+        - 「訪問可能時間帯(始)」：経由地点に到着してもよい最も早い時刻を入力してください
+        - 「訪問可能時間帯(終)」：経由地点に滞在してもよい最も遅い時刻を入力してください
         """
         )
         st.markdown(
             """
         ### 使い方
-         - 追加する場合：「名称」「住所」「見積診察時間」「訪問可能時間(始)」「訪問可能時間(終)」を入力し，「追加」ボタンを押してください
-         - 編集/削除する場合：上段の「編集/削除対象」で対象の経由地点を選択し，下段で「更新」/「削除」ボタンを押してください
+        - 追加する場合：「名称」「住所」「見積診察時間」「訪問可能時間(始)」「訪問可能時間(終)」を入力し，「追加」ボタンを押してください
+        - 編集/削除する場合：上段の「編集/削除対象」で対象の経由地点を選択し，下段で「更新」/「削除」ボタンを押してください
         """
         )
 

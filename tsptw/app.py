@@ -13,7 +13,6 @@ class MultiPageApp:
         self.pages = {page.page_id: page for page in pages}
         self.nav_label = nav_label
 
-    @st.cache(hash_funcs={Client: hash_client}, allow_output_mutation=True)
     def connect_to_database(self, key: str):
         db = firestore.client()
         return db.collection(key).document("user_info")

@@ -1,23 +1,22 @@
 import numpy as np
+# import pandas as pd
+# import pydeck as pdk
 import datetime as dt
 from datetime import timedelta
 
 import streamlit as st
 from typing import List
+from tsptw.const import StepPoint, gmaps, PageId, create_datetime  #, get_route, hex_to_rgb
 from .base import BasePage
-from tsptw.const import hash_client, StepPoint, gmaps, PageId, create_datetime
 from firebase_admin import firestore
-from google.cloud.firestore_v1.client import Client
 
-
-from ortools.constraint_solver import routing_enums_pb2
-from ortools.constraint_solver import pywrapcp
+from ortools.constraint_solver import pywrapcp  #, routing_enums_pb2
 
 
 class FindRoutePage(BasePage):
     def __init__(self, page_id: PageId, title: str) -> None:
         super().__init__(page_id, title)
-        self.step_points = []
+        self.step_points_id = []
 
     def create_time_matrix(self, *step_points: List[StepPoint]):
         n = len(step_points)
@@ -58,34 +57,39 @@ class FindRoutePage(BasePage):
     # Stores the data for the problem.
     def create_data_model(self, start_time: dt.datetime, end_time: dt.datetime, *step_points: List[StepPoint]):
         data = {}
-        data["name"] = [sp.name for sp in step_points]
+        data["sp"] = step_points
         data["start_time"] = start_time
         data["depot_opening_time"] = self.diff_min(end_time, start_time)
         data["time_matrix"] = self.create_time_matrix(*step_points)
         # https://developers.google.com/optimization/reference/python/constraint_solver/pywrapcp#intvar
         data["time_windows"] = self.create_time_windows(start_time, *step_points)
-        data["num_vehicles"] = 1
+        data["vehicles"] = [
+            {"path_color": "#ed1c24"}
+        ]
         data["depot"] = 0
         return data
 
     def print_solution(self, data, manager, routing, solution):
         time_dimension = routing.GetDimensionOrDie("Time")
         total_time = 0
-        for vehicle_id in range(data["num_vehicles"]):
+        for vehicle_id in range(len(data["vehicles"])):
             index = routing.Start(vehicle_id)
+            step_points = []
             # st.write("Route for vehicle", vehicle_id)
             while not routing.IsEnd(index):
+                sp = data["sp"][manager.IndexToNode(index)]
+                step_points += [sp]
                 time_var = time_dimension.CumulVar(index)
                 if solution.Min(time_var) == solution.Max(time_var):
                     st.write(
-                        data["name"][manager.IndexToNode(index)],
+                        sp.name,
                         "さん宅．最短で",
                         data["start_time"] + timedelta(minutes=solution.Min(time_var)),
                         "に到着することができます",
                     )
                 else:
                     st.write(
-                        data["name"][manager.IndexToNode(index)],
+                        sp.name,
                         "さん宅．最短で",
                         data["start_time"] + timedelta(minutes=solution.Min(time_var)),
                         "に到着することができますが，遅くとも",
@@ -96,13 +100,51 @@ class FindRoutePage(BasePage):
             time_var = time_dimension.CumulVar(index)
             st.write(
                 "最終地点(=出発地点) ",
-                data["name"][manager.IndexToNode(index)],
+                data["sp"][0].name,
                 "．最短で",
                 data["start_time"] + timedelta(minutes=solution.Min(time_var)),
                 "に到着することができます",
             )
             st.write("この経路の所要時間: ", solution.Min(time_var), "分")
             total_time += solution.Min(time_var)
+
+            # chunk_num = (len(step_points) // 10) + 1
+            # per_chunk = len(step_points) // chunk_num
+            # path = []
+            # for chunk_index in range(chunk_num):
+            #     path += get_route(step_points[per_chunk*chunk_index: per_chunk*(chunk_index+1)])
+
+            # df = pd.DataFrame([{
+            #     "color": data["vehicles"][vehicle_id]["path_color"], 
+            #     "path": path
+            # }])
+            # df["color"] = df["color"].apply(hex_to_rgb)
+
+            # layer = pdk.Layer(
+            #     type="PathLayer",
+            #     data=df,
+            #     pickable=True,
+            #     get_color="color",
+            #     width_scale=20,
+            #     width_min_pixels=2,
+            #     get_path="path",
+            #     get_width=5,
+            # )
+
+            # view_state = pdk.ViewState(
+            #     latitude=data["sp"][0].lat,
+            #     longitude=data["sp"][0].lng,
+            #     zoom=12,
+            #     # pitch=50,
+            # )
+
+            # st.pydeck_chart(
+            #     pdk.Deck(
+            #         layers=[layer], 
+            #         initial_view_state=view_state, 
+            #     )
+            # )
+
         # st.write("全経路の所要時間: ", total_time, "分")
 
     # Solve the VRP with time windows.
@@ -116,7 +158,7 @@ class FindRoutePage(BasePage):
         data = self.create_data_model(start_time, end_time, *step_points)
 
         # Create the routing index manager.
-        manager = pywrapcp.RoutingIndexManager(len(data["time_matrix"]), data["num_vehicles"], data["depot"])
+        manager = pywrapcp.RoutingIndexManager(len(data["time_matrix"]), len(data["vehicles"]), data["depot"])
 
         # Create Routing Model.
         routing = pywrapcp.RoutingModel(manager)
@@ -152,14 +194,14 @@ class FindRoutePage(BasePage):
             time_dimension.CumulVar(index).SetRange(time_window[0], time_window[1])
         # Add time window constraints for each vehicle start node.
         depot_idx = data["depot"]
-        for vehicle_id in range(data["num_vehicles"]):
+        for vehicle_id in range(len(data["vehicles"])):
             index = routing.Start(vehicle_id)
             time_dimension.CumulVar(index).SetRange(
                 data["time_windows"][depot_idx][0], data["time_windows"][depot_idx][1]
             )
 
         # Instantiate route start and end times to produce feasible times.
-        for i in range(data["num_vehicles"]):
+        for i in range(len(data["vehicles"])):
             routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(i)))
             routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
 
@@ -168,7 +210,7 @@ class FindRoutePage(BasePage):
         
         # Setting first solution heuristic.
         search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-        search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.AUTOMATIC
+        # search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.AUTOMATIC
 
         # Solve the problem.
         solution = routing.SolveWithParameters(search_parameters)
@@ -181,7 +223,6 @@ class FindRoutePage(BasePage):
             st.warning(data["time_matrix"])  # for debug
         return solution
 
-    @st.cache(hash_funcs={Client: hash_client}, allow_output_mutation=True)
     def connect_to_database(self, key: str):
         db = firestore.client()
         return db.collection(key).document("contact")
@@ -215,7 +256,7 @@ class FindRoutePage(BasePage):
             return
 
         if "step_points" in st.session_state and st.session_state["step_points"]:
-            self.step_points = st.session_state["step_points"]
+            self.step_points_id = [pt['id'] for pt in st.session_state["step_points"]]
 
         contacts = self.sort_data(self.connect_to_database(st.session_state["user_info"]["email"]))
 
@@ -229,13 +270,13 @@ class FindRoutePage(BasePage):
             )
             col2.time_input("出発時刻", dt.time.fromisoformat("09:00:00"), key="start_time")
 
-            self.step_points = st.multiselect(
+            step_points = st.multiselect(
                 "経由地点",
                 contacts.values(),
-                default=self.step_points,
+                default=[contacts[id] for id in self.step_points_id],
                 format_func=lambda contact: contact["name"],
                 key="step_points",
-                disabled=len(self.step_points) > 25,
+                disabled=len(self.step_points_id) > 25,
             )
 
             if st.session_state.depot["id"] in [pt["id"] for pt in st.session_state.step_points]:
@@ -248,7 +289,7 @@ class FindRoutePage(BasePage):
                     f"出発地点の訪問可能時間帯(始){st.session_state.depot['start_time']}よりも出発時刻{st.session_state.start_time}が早いです．出発時刻を見直すか出発地点を見直してください．"
                 )
 
-            all_points = [StepPoint.from_dict(p) for p in [depot] + self.step_points]
+            all_points = [StepPoint.from_dict(p) for p in [depot] + step_points]
 
             if st.button("ルート探索 🔍"):
                 self.solve_vrp(*all_points)
